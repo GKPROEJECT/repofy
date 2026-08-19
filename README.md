@@ -208,7 +208,7 @@ See the [`LICENSE`](LICENSE) file for the complete license information.
 * **GitHub:** https://github.com/GKPROEJECT/repofy
 * **Issues:** https://github.com/GKPROEJECT/repofy/issues
 * **Releases:** https://github.com/GKPROEJECT/repofy/releases
-* **Website:** https://github.com/GKPROEJECT/repofy-web
+* **Website:** https://repofy-web-rho.vercel.app/
 
 ---
 
