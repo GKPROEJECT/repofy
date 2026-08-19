@@ -57,7 +57,7 @@ Repofy provides a graphical interface for discovering and managing software whil
 
 Repofy is designed for **Arch Linux and Arch-based distributions**.
 
-Compatibility may depend on the specific distribution and the package-management configuration it provides.
+Compatibility may depend on the specific distribution and its package-management configuration.
 
 Examples include:
 
@@ -71,41 +71,25 @@ Examples include:
 
 ## Installation
 
-### Arch User Repository
+### Current status
 
-Repofy is intended to be distributed through the **Arch User Repository (AUR)**.
+Repofy is currently in **early development** and is **not yet available as an installable package for end users**.
 
-Once the AUR package is available, installation will be possible using an AUR helper such as:
+The current version is **0.1.1**.
 
-```bash
-yay -S repofy
-```
+The project is planned to be distributed through the **Arch User Repository (AUR)** once AUR distribution is available.
 
-or:
-
-```bash
-paru -S repofy
-```
-
-> The AUR package will be published once the project reaches its initial release.
+> **Note:** `yay -S repofy` and `paru -S repofy` will not work yet because the Repofy AUR package has not been published.
 
 ### GitHub Releases
 
-You can also download available releases directly from the project's GitHub repository:
+The **v0.1.1** release is available on GitHub as the first public development release.
+
+At this stage, the GitHub release contains the project source code and is not intended as a direct installation method for end users.
+
+You can find the release here:
 
 https://github.com/GKPROEJECT/repofy/releases
-
----
-
-## Usage
-
-After installing Repofy, launch it from your application menu or from the terminal:
-
-```bash
-repofy
-```
-
-From the application you can browse available software and manage installations and removals through the graphical interface.
 
 ---
 
@@ -135,83 +119,3 @@ repofy/
 ├── ...
 ├── LICENSE
 └── README.md
-```
-
----
-
-## Development
-
-Clone the repository:
-
-```bash
-git clone https://github.com/GKPROEJECT/repofy.git
-cd repofy
-```
-
-From there, follow the development/build instructions provided for the current release.
-
-> Development instructions may change as Repofy evolves.
-
----
-
-## Roadmap
-
-Repofy is an actively evolving project.
-
-Planned improvements include:
-
-* [ ] Publish the first AUR package
-* [ ] Improve software discovery
-* [ ] Improve package information
-* [ ] Improve installation feedback
-* [ ] Improve uninstallation workflow
-* [ ] Add more package-management features
-* [ ] Improve the overall user experience
-* [ ] Expand documentation
-
-The roadmap may change as development progresses.
-
----
-
-## Contributing
-
-Contributions are welcome.
-
-If you find a bug, have an idea or want to improve Repofy, you can open an issue or submit a pull request.
-
-### Bug reports
-
-When reporting a bug, please include:
-
-* Your distribution
-* Your desktop environment
-* Repofy version
-* Steps to reproduce the problem
-* Relevant error messages or logs
-
-### Feature requests
-
-Feature requests are welcome as well. Please describe the problem you are trying to solve and how you think Repofy could improve the experience.
-
----
-
-## License
-
-Repofy is open-source software.
-
-See the [`LICENSE`](LICENSE) file for the complete license information.
-
----
-
-## Links
-
-* **GitHub:** https://github.com/GKPROEJECT/repofy
-* **Issues:** https://github.com/GKPROEJECT/repofy/issues
-* **Releases:** https://github.com/GKPROEJECT/repofy/releases
-* **Website:** https://repofy-web-rho.vercel.app/
-
----
-
-<p align="center">
-  Made with ❤️ for the Linux community.
-</p>
