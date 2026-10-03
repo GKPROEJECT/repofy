@@ -7,4 +7,5 @@ pub struct Package {
     pub description: String,
     pub repository: String,
     pub manager: String,
+    pub icon: Option<String>,
 }

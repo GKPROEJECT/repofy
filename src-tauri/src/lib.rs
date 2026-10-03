@@ -1,7 +1,17 @@
 mod package;
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use package::Package;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const MAX_ICON_SIZE: u64 = 512 * 1024;
+const ICON_EXTENSIONS: [&str; 4] = ["png", "svg", "webp", "jpg"];
+const ICON_SIZES: [&str; 8] = [
+    "scalable", "512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32",
+];
 
 #[derive(serde::Serialize)]
 struct SystemInfo {
@@ -91,6 +101,144 @@ fn search_pacman_internal(query: &str) -> Result<Vec<Package>, String> {
     ))
 }
 
+fn package_icon(package_name: &str) -> Option<String> {
+    if package_name.is_empty()
+        || !package_name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_.".contains(character))
+    {
+        return None;
+    }
+
+    let icon_name = find_desktop_icon_name(package_name)?;
+    let icon_path = find_icon_path(&icon_name)?;
+    let metadata = fs::metadata(&icon_path).ok()?;
+
+    if metadata.len() > MAX_ICON_SIZE {
+        return None;
+    }
+
+    let contents = fs::read(&icon_path).ok()?;
+    let extension = icon_path.extension()?.to_str()?.to_ascii_lowercase();
+    let mime_type = match extension.as_str() {
+        "png" => "image/png",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "jpg" => "image/jpeg",
+        _ => return None,
+    };
+
+    Some(format!(
+        "data:{};base64,{}",
+        mime_type,
+        BASE64.encode(contents)
+    ))
+}
+
+fn find_desktop_icon_name(package_name: &str) -> Option<String> {
+    let mut application_directories = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+    ];
+
+    if let Some(home) = std::env::var_os("HOME") {
+        application_directories.push(PathBuf::from(home).join(".local/share/applications"));
+    }
+
+    for directory in application_directories {
+        let Ok(entries) = fs::read_dir(directory) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("desktop")
+                || !path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(|stem| stem.eq_ignore_ascii_case(package_name))
+            {
+                continue;
+            }
+
+            let Ok(content) = fs::read_to_string(path) else {
+                continue;
+            };
+            if let Some(icon_name) = content
+                .lines()
+                .find_map(|line| line.strip_prefix("Icon="))
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+            {
+                return Some(icon_name.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn find_icon_path(icon_name: &str) -> Option<PathBuf> {
+    let icon_path = Path::new(icon_name);
+    if icon_path.is_absolute() {
+        return icon_path.is_file().then(|| icon_path.to_path_buf());
+    }
+
+    let icon_name = if icon_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| ICON_EXTENSIONS.contains(&extension))
+    {
+        icon_path.file_stem()?.to_str()?
+    } else {
+        icon_name
+    };
+
+    let mut icon_roots = vec![
+        PathBuf::from("/usr/share/icons"),
+        PathBuf::from("/usr/local/share/icons"),
+        PathBuf::from("/usr/share/pixmaps"),
+        PathBuf::from("/usr/local/share/pixmaps"),
+    ];
+
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        icon_roots.push(home.join(".local/share/icons"));
+        icon_roots.push(home.join(".local/share/pixmaps"));
+    }
+
+    for root in &icon_roots {
+        for extension in ICON_EXTENSIONS {
+            let candidate = root.join(format!("{icon_name}.{extension}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    for root in icon_roots.iter().filter(|root| root.ends_with("icons")) {
+        let Ok(themes) = fs::read_dir(root) else {
+            continue;
+        };
+        for theme in themes.flatten() {
+            for size in ICON_SIZES {
+                for extension in ICON_EXTENSIONS {
+                    let candidate = theme
+                        .path()
+                        .join(size)
+                        .join("apps")
+                        .join(format!("{icon_name}.{extension}"));
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn parse_pacman_search_output(stdout: &str) -> Vec<Package> {
     let mut packages = Vec::new();
 
@@ -122,6 +270,7 @@ fn parse_pacman_search_output(stdout: &str) -> Vec<Package> {
                     version: parts[1].to_string(),
                     description,
                     manager: "pacman".to_string(),
+                    icon: package_icon(parts[0]),
                 });
             }
         }

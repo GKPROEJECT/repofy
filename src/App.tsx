@@ -3,6 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import Settings from "./components/Settings";
 import logoIcon from "../logo.ico";
+import {
+  isLanguage,
+  translate,
+  type Language,
+} from "./i18n";
 
 interface SystemInfo {
   distribution: string;
@@ -17,6 +22,7 @@ interface Package {
   description: string;
   repository: string;
   manager: string;
+  icon: string | null;
 }
 
 type InstallationStatus = "checking" | "installed" | "available";
@@ -24,10 +30,32 @@ const STORAGE_KEYS = {
   lastSearch: "repofy.last-search",
   rememberLastSearch:
     "repofy.remember-last-search",
+  language: "repofy.language",
+  theme: "repofy.theme",
 } as const;
 
 function App() {
   const [showSettings, setShowSettings] = useState(false);
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === "undefined") {
+      return "es";
+    }
+
+    const savedLanguage = window.localStorage.getItem(
+      STORAGE_KEYS.language,
+    );
+    return isLanguage(savedLanguage) ? savedLanguage : "es";
+  });
+  const [theme, setTheme] = useState<"dark" | "light">(() =>
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(STORAGE_KEYS.theme) === "light"
+      ? "light"
+      : "dark",
+  );
+  const t = (
+    key: Parameters<typeof translate>[1],
+    values?: Parameters<typeof translate>[2],
+  ) => translate(language, key, values);
   const [rememberLastSearch, setRememberLastSearch] =
     useState(() => {
       if (typeof window === "undefined") {
@@ -129,6 +157,23 @@ function App() {
 
     loadSystemInfo();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.language, language);
+    document.documentElement.lang = language;
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.theme, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -376,9 +421,7 @@ function App() {
       setInstallationStatuses({});
 
       setSearchError(
-        typeof error === "string"
-          ? error
-          : "No se pudieron buscar los paquetes."
+        t("operationFailed")
       );
 
       setSearching(false);
@@ -439,8 +482,7 @@ function App() {
     setPackageActionMessage("");
 
     try {
-      const message =
-        await invoke<string>(
+      await invoke<string>(
           "install_package",
           {
             packageName:
@@ -448,7 +490,7 @@ function App() {
           }
         );
 
-      setPackageActionMessage(message);
+      setPackageActionMessage("success");
 
       /*
        * Comprobamos el estado real después
@@ -480,9 +522,7 @@ function App() {
       );
 
       setPackageActionError(
-        typeof error === "string"
-          ? error
-          : "No se pudo instalar el paquete."
+        t("operationFailed")
       );
     } finally {
       setInstalling(false);
@@ -507,8 +547,7 @@ function App() {
     setPackageActionMessage("");
 
     try {
-      const message =
-        await invoke<string>(
+      await invoke<string>(
           "remove_package",
           {
             packageName:
@@ -516,7 +555,7 @@ function App() {
           }
         );
 
-      setPackageActionMessage(message);
+      setPackageActionMessage("success");
 
       /*
        * Comprobamos el estado real después
@@ -548,9 +587,7 @@ function App() {
       );
 
       setPackageActionError(
-        typeof error === "string"
-          ? error
-          : "No se pudo desinstalar el paquete."
+        t("operationFailed")
       );
     } finally {
       setRemoving(false);
@@ -613,6 +650,11 @@ function App() {
           setRememberLastSearch
         }
         clearSavedSearch={clearSavedSearch}
+        language={language}
+        setLanguage={setLanguage}
+        theme={theme}
+        setTheme={setTheme}
+        t={t}
       />
     );
   }
@@ -622,7 +664,7 @@ function App() {
    */
   if (selectedPackage) {
     return (
-      <div className="min-h-screen bg-[#09090b] text-zinc-100">
+      <div data-theme={theme} className="min-h-screen bg-[#09090b] text-zinc-100">
         <main className="min-h-screen overflow-auto">
 
           <header className="flex h-16 items-center justify-between border-b border-zinc-800/80 px-8">
@@ -631,13 +673,13 @@ function App() {
               onClick={goBackToResults}
               className="text-sm text-zinc-500 transition hover:text-white"
             >
-              ← Volver a resultados
+              {t("backResults")}
             </button>
 
             <button
               onClick={openSettings}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-white"
-              title="Ajustes"
+              title={t("settings")}
             >
               ⚙
             </button>
@@ -651,10 +693,20 @@ function App() {
 
                 <div className="flex items-start gap-5">
 
-                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-3xl font-semibold text-zinc-400">
+                  <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-3xl font-semibold text-zinc-400">
                     {selectedPackage.name
                       .charAt(0)
                       .toUpperCase()}
+                    {selectedPackage.icon && (
+                      <img
+                        src={selectedPackage.icon}
+                        alt={`Icono de ${selectedPackage.name}`}
+                        className="absolute h-20 w-20 rounded-2xl bg-zinc-900 object-contain p-2"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
                   </div>
 
                   <div className="min-w-0 text-left">
@@ -670,7 +722,7 @@ function App() {
 
                           <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-zinc-600 border-t-blue-500" />
 
-                          Comprobando...
+                          {t("checking")}...
 
                         </span>
                       )}
@@ -678,14 +730,14 @@ function App() {
                       {!checkingInstalled &&
                         packageInstalled && (
                           <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                            ✓ Instalado
+                            {t("installed")}
                           </span>
                         )}
 
                       {!checkingInstalled &&
                         !packageInstalled && (
                           <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-500">
-                            Disponible
+                            {t("available")}
                           </span>
                         )}
 
@@ -697,7 +749,7 @@ function App() {
 
                     <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-500">
                       {selectedPackage.description ||
-                        "Sin descripción disponible."}
+                        t("noDescription")}
                     </p>
 
                   </div>
@@ -710,7 +762,7 @@ function App() {
               <section className="mb-8 w-full">
 
                 <h2 className="mb-4 text-xl font-semibold text-white">
-                  Información
+                  {t("information")}
                 </h2>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -718,7 +770,7 @@ function App() {
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
 
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                      Versión
+                      {t("version")}
                     </p>
 
                     <p className="mt-2 text-lg font-semibold text-white">
@@ -730,7 +782,7 @@ function App() {
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
 
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                      Repositorio
+                      {t("repository")}
                     </p>
 
                     <p className="mt-2 text-lg font-semibold text-white">
@@ -742,7 +794,7 @@ function App() {
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
 
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                      Gestor de paquetes
+                      {t("packageManager")}
                     </p>
 
                     <p className="mt-2 text-lg font-semibold text-white">
@@ -754,12 +806,12 @@ function App() {
                   <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
 
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                      Arquitectura
+                      {t("architecture")}
                     </p>
 
                     <p className="mt-2 text-lg font-semibold text-white">
                       {systemInfo?.architecture ??
-                        "Desconocida"}
+                        t("unknown")}
                     </p>
 
                   </div>
@@ -776,20 +828,22 @@ function App() {
                   <h2 className="text-xl font-semibold text-white">
 
                     {checkingInstalled
-                      ? "Comprobando paquete"
+                      ? t("checkingPackage")
                       : packageInstalled
-                      ? "Paquete instalado"
-                      : "Instalación"}
+                      ? t("packageInstalled")
+                      : t("installation")}
 
                   </h2>
 
                   <p className="mt-2 text-sm leading-6 text-zinc-500">
 
                     {checkingInstalled
-                      ? "RepoFy está comprobando el estado real del paquete."
+                      ? t("checkingPackageDescription")
                       : packageInstalled
-                      ? "Este paquete ya está instalado en tu sistema."
-                      : `RepoFy ha detectado que este paquete está disponible mediante ${selectedPackage.manager}.`}
+                      ? t("installedAlreadyDescription")
+                      : t("installationAvailableDescription", {
+                          manager: selectedPackage.manager,
+                        })}
 
                   </p>
 
@@ -810,7 +864,7 @@ function App() {
 
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-blue-500" />
 
-                      Comprobando estado...
+                      {t("checkingStatus")}
 
                     </div>
                   )}
@@ -819,7 +873,7 @@ function App() {
                     <div className="mt-5 rounded-xl border border-red-900/50 bg-red-950/20 p-4">
 
                       <p className="text-sm font-medium text-red-300">
-                        No se pudo realizar la operación
+                        {t("operationFailed")}
                       </p>
 
                       <p className="mt-1 text-xs leading-5 text-red-400/80">
@@ -834,7 +888,9 @@ function App() {
                       <div className="mt-5 rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4">
 
                         <p className="text-sm font-medium text-emerald-300">
-                          {packageActionMessage}
+                          {packageActionMessage === "success"
+                            ? t("operationSucceeded")
+                            : packageActionMessage}
                         </p>
 
                       </div>
@@ -855,8 +911,8 @@ function App() {
                           className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {installing
-                            ? "Instalando..."
-                            : "Instalar"}
+                            ? t("installing")
+                            : t("install")}
                         </button>
                       )}
 
@@ -867,7 +923,7 @@ function App() {
                             disabled
                             className="cursor-default rounded-lg bg-emerald-600/20 px-5 py-2.5 text-sm font-medium text-emerald-400"
                           >
-                            ✓ Instalado
+                            {t("installed")}
                           </button>
 
                           <button
@@ -881,8 +937,8 @@ function App() {
                             className="rounded-lg border border-red-900/60 px-5 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-950/40 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {removing
-                              ? "Desinstalando..."
-                              : "Desinstalar"}
+                              ? t("uninstalling")
+                              : t("uninstall")}
                           </button>
                         </>
                       )}
@@ -892,8 +948,8 @@ function App() {
                   <p className="mt-3 text-xs text-zinc-600">
 
                     {packageInstalled
-                      ? "Puedes desinstalar este paquete desde RepoFy."
-                      : "RepoFy utilizará pkexec para solicitar permisos de administrador."}
+                      ? t("canUninstall")
+                      : t("polkitDescription")}
 
                   </p>
 
@@ -911,7 +967,7 @@ function App() {
    * VISTA PRINCIPAL
    */
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100">
+    <div data-theme={theme} className="min-h-screen bg-[#09090b] text-zinc-100">
       <main className="min-h-screen overflow-auto">
 
         {/* TOP BAR */}
@@ -931,7 +987,7 @@ function App() {
           <button
             onClick={openSettings}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-white"
-            title="Ajustes"
+            title={t("settings")}
           >
             ⚙
           </button>
@@ -947,22 +1003,21 @@ function App() {
 
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
 
-                Software para Linux
+                {t("softwareLinux")}
 
               </div>
 
               <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-white md:text-5xl">
 
-                Encuentra el software
+                {t("findSoftware")}
                 <br />
-                que necesitas.
+                {t("findSoftwareLine2")}
 
               </h1>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-500">
 
-                Busca aplicaciones y paquetes disponibles
-                en los repositorios de tu sistema.
+                {t("searchDescription")}
 
               </p>
 
@@ -993,7 +1048,7 @@ function App() {
 
                         setSearchError("");
                       }}
-                      placeholder="Buscar una aplicación o paquete..."
+                      placeholder={t("searchPlaceholder")}
                       className="h-16 flex-1 bg-transparent text-base text-white outline-none placeholder:text-zinc-600"
                     />
 
@@ -1003,8 +1058,8 @@ function App() {
                       className="hidden rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:block"
                     >
                       {searching
-                        ? "Buscando..."
-                        : "Buscar"}
+                        ? t("searching")
+                        : t("search")}
                     </button>
 
                   </div>
@@ -1014,7 +1069,7 @@ function App() {
                 <div className="mt-3 flex items-center gap-2 px-2 text-xs text-zinc-600">
 
                   <span>
-                    Ejemplos:
+                    {t("examples")}
                   </span>
 
                   <button
@@ -1077,24 +1132,16 @@ function App() {
                   <div>
 
                     <h2 className="text-xl font-semibold text-white">
-                      Resultados
+                      {t("results")}
                     </h2>
 
                     <p className="mt-1 text-sm text-zinc-600">
 
                       {searching
-                        ? "Buscando en los repositorios..."
-                        : `${packages.length} resultado${
-                            packages.length ===
-                            1
-                              ? ""
-                              : "s"
-                          } encontrado${
-                            packages.length ===
-                            1
-                              ? ""
-                              : "s"
-                          }`}
+                        ? t("searchingRepositories")
+                        : t("resultsFound", {
+                            count: packages.length,
+                          })}
 
                     </p>
 
@@ -1103,7 +1150,7 @@ function App() {
                   {packages.length > 0 &&
                     !searching && (
                       <span className="text-xs text-zinc-600">
-                        Ordenados por relevancia
+                        {t("sortedByRelevance")}
                       </span>
                     )}
 
@@ -1116,7 +1163,7 @@ function App() {
                     <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-blue-500" />
 
                     <p className="text-sm text-zinc-400">
-                      Buscando paquetes...
+                      {t("searchingPackages")}
                     </p>
 
                   </div>
@@ -1161,10 +1208,21 @@ function App() {
                               <div className="flex items-start gap-4">
 
                                 {/* ICONO */}
-                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-lg font-semibold text-zinc-400">
+                                <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-lg font-semibold text-zinc-400">
                                   {pkg.name
                                     .charAt(0)
                                     .toUpperCase()}
+                                  {pkg.icon && (
+                                    <img
+                                      src={pkg.icon}
+                                      alt={`${pkg.name} icon`}
+                                      className="absolute h-12 w-12 rounded-xl bg-zinc-950 object-contain p-1"
+                                      onError={(event) => {
+                                        event.currentTarget.style.display =
+                                          "none";
+                                      }}
+                                    />
+                                  )}
                                 </div>
 
                                 {/* INFO */}
@@ -1178,7 +1236,7 @@ function App() {
 
                                     {isExact && (
                                       <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-400">
-                                        Coincidencia exacta
+                                        {t("exactMatch")}
                                       </span>
                                     )}
 
@@ -1189,7 +1247,7 @@ function App() {
 
                                         <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-zinc-600 border-t-blue-500" />
 
-                                        Comprobando
+                                        {t("checking")}
 
                                       </span>
                                     )}
@@ -1197,14 +1255,14 @@ function App() {
                                     {status ===
                                       "installed" && (
                                       <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
-                                        ✓ Instalado
+                                        {t("installed")}
                                       </span>
                                     )}
 
                                     {status ===
                                       "available" && (
                                       <span className="rounded-full bg-zinc-800 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                                        Disponible
+                                        {t("available")}
                                       </span>
                                     )}
 
@@ -1212,7 +1270,7 @@ function App() {
 
                                   <p className="mt-1 text-sm text-zinc-500">
                                     {pkg.description ||
-                                      "Sin descripción disponible."}
+                                      t("noDescription")}
                                   </p>
 
                                   <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1220,7 +1278,7 @@ function App() {
                                     <span className="inline-flex items-center rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-400">
 
                                       <span className="mr-1.5 text-zinc-600">
-                                        Versión
+                                        {t("version")}
                                       </span>
 
                                       {pkg.version}
@@ -1248,7 +1306,7 @@ function App() {
                                   }
                                   className="hidden shrink-0 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white sm:block"
                                 >
-                                  Ver detalles
+                                  {t("details")}
                                 </button>
 
                               </div>
@@ -1274,12 +1332,12 @@ function App() {
                       </div>
 
                       <h3 className="font-medium text-white">
-                        No encontramos resultados
+                        {t("noResults")}
                       </h3>
 
                       <p className="mt-2 text-sm text-zinc-600">
 
-                        No se encontraron paquetes para{" "}
+                        {t("noPackagesFor")}{" "}
 
                         <span className="text-zinc-400">
                           {searchQuery}
@@ -1301,11 +1359,11 @@ function App() {
               <div className="mb-5">
 
                 <h2 className="text-xl font-semibold text-white">
-                  Tu sistema
+                  {t("yourSystem")}
                 </h2>
 
                 <p className="mt-1 text-sm text-zinc-600">
-                  Información detectada automáticamente por RepoFy
+                  {t("systemInfo")}
                 </p>
 
               </div>
@@ -1320,16 +1378,16 @@ function App() {
                     <div>
 
                       <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                        Distribución
+                        {t("distribution")}
                       </p>
 
                       <p className="mt-2 text-lg font-semibold text-white">
                         {systemInfo?.distribution ??
-                          "Detectando..."}
+                          t("detecting")}
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-500">
-                        Familia{" "}
+                        {t("family")}{" "}
                         {systemInfo?.family ??
                           "Linux"}
                       </p>
@@ -1352,20 +1410,20 @@ function App() {
                     <div>
 
                       <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                        Arquitectura
+                        {t("architecture")}
                       </p>
 
                       <p className="mt-2 text-lg font-semibold text-white">
                         {systemInfo?.architecture ??
-                          "Detectando..."}
+                          t("detecting")}
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-500">
 
                         {systemInfo?.architecture ===
                         "x86_64"
-                          ? "Sistema de 64 bits"
-                          : "Arquitectura detectada"}
+                          ? t("system64")
+                          : t("architectureDetected")}
 
                       </p>
 
@@ -1391,11 +1449,11 @@ function App() {
                 <div className="mb-5">
 
                   <h2 className="font-semibold text-white">
-                    Gestores disponibles
+                    {t("availableManagers")}
                   </h2>
 
                   <p className="mt-1 text-sm text-zinc-600">
-                    Herramientas disponibles para instalar software
+                    {t("availableTools")}
                   </p>
 
                 </div>
@@ -1417,7 +1475,7 @@ function App() {
                         </span>
 
                         <span className="text-[10px] uppercase text-emerald-500">
-                          Disponible
+                          {t("available")}
                         </span>
 
                       </div>

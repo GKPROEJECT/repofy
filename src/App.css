@@ -1,1 +1,63 @@
 @import "tailwindcss";
+
+[data-theme="light"] {
+  background-color: #fafafa !important;
+  color: #18181b !important;
+}
+
+[data-theme="light"] [class*="bg-[#09090b]"],
+[data-theme="light"] [class*="bg-zinc-950"],
+[data-theme="light"] [class*="bg-zinc-900"] {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] [class*="bg-zinc-800"] {
+  background-color: #f4f4f5 !important;
+}
+
+[data-theme="light"] [class*="border-zinc-"] {
+  border-color: #e4e4e7 !important;
+}
+
+[data-theme="light"] [class*="text-white"],
+[data-theme="light"] [class*="text-zinc-100"],
+[data-theme="light"] [class*="text-zinc-200"] {
+  color: #18181b !important;
+}
+
+[data-theme="light"] [class*="text-zinc-300"],
+[data-theme="light"] [class*="text-zinc-400"] {
+  color: #52525b !important;
+}
+
+[data-theme="light"] [class*="text-zinc-500"],
+[data-theme="light"] [class*="text-zinc-600"] {
+  color: #71717a !important;
+}
+
+[data-theme="light"] [class*="placeholder:text-zinc-"]::placeholder {
+  color: #a1a1aa !important;
+}
+
+[data-theme="light"] [class*="hover:bg-zinc-"]:hover {
+  background-color: #f4f4f5 !important;
+}
+
+[data-theme="light"] [class*="hover:text-white"]:hover {
+  color: #18181b !important;
+}
+
+[data-theme="light"] [class*="text-blue-300"],
+[data-theme="light"] [class*="text-blue-400"] {
+  color: #1d4ed8 !important;
+}
+
+[data-theme="light"] [class*="text-emerald-300"],
+[data-theme="light"] [class*="text-emerald-400"] {
+  color: #047857 !important;
+}
+
+[data-theme="light"] [class*="text-red-300"],
+[data-theme="light"] [class*="text-red-400"] {
+  color: #b91c1c !important;
+}
