@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import Settings from "./components/Settings";
@@ -14,6 +14,11 @@ interface SystemInfo {
   family: string;
   architecture: string;
   package_managers: string[];
+  managers: {
+    name: string;
+    installed: boolean;
+    installable: boolean;
+  }[];
 }
 
 interface Package {
@@ -22,7 +27,15 @@ interface Package {
   description: string;
   repository: string;
   manager: string;
+  title?: string | null;
   icon: string | null;
+}
+
+interface UpdateInfo {
+  name: string;
+  current: string;
+  latest: string;
+  source: string;
 }
 
 type InstallationStatus = "checking" | "installed" | "available";
@@ -33,6 +46,14 @@ const STORAGE_KEYS = {
   language: "repofy.language",
   theme: "repofy.theme",
 } as const;
+
+function packageKey(pkg: Package) {
+  return `${pkg.manager}:${pkg.name}`;
+}
+
+function packageLabel(pkg: Package) {
+  return pkg.title || pkg.name;
+}
 
 function App() {
   const [showSettings, setShowSettings] = useState(false);
@@ -94,6 +115,16 @@ function App() {
       );
     }
   );
+  const searchRequestId = useRef(0);
+  const [installingManager, setInstallingManager] = useState("");
+  const [screenshots, setScreenshots] = useState<string[]>([]);
+  const [zoomedScreenshot, setZoomedScreenshot] = useState("");
+  const [managerError, setManagerError] = useState("");
+  const [updates, setUpdates] = useState<UpdateInfo[] | null>(null);
+  const [updatesError, setUpdatesError] = useState("");
+  const [updatingAll, setUpdatingAll] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateError, setUpdateError] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [packages, setPackages] = useState<Package[]>([]);
@@ -158,6 +189,106 @@ function App() {
     loadSystemInfo();
   }, []);
 
+  async function refreshUpdates() {
+    setUpdatesError("");
+
+    try {
+      setUpdates(await invoke<UpdateInfo[]>("list_updates"));
+    } catch (error) {
+      console.error("Error buscando actualizaciones:", error);
+      setUpdates(null);
+      setUpdatesError(
+        typeof error === "string" ? error : t("updateFailed")
+      );
+    }
+  }
+
+  async function installManagerTool(name: string) {
+    setInstallingManager(name);
+    setManagerError("");
+
+    try {
+      await invoke<string>("install_manager", { name });
+      setSystemInfo(await invoke<SystemInfo>("get_system_info"));
+    } catch (error) {
+      setManagerError(
+        typeof error === "string" ? error : t("operationFailed")
+      );
+    } finally {
+      setInstallingManager("");
+    }
+  }
+
+  async function updateAllPrograms() {
+    if (updatingAll) {
+      return;
+    }
+
+    setUpdatingAll(true);
+    setUpdateMessage("");
+    setUpdateError("");
+
+    try {
+      await invoke<string>("update_system");
+      setUpdateMessage(t("updateSuccess"));
+    } catch (error) {
+      console.error("Error actualizando el sistema:", error);
+      setUpdateError(
+        typeof error === "string" ? error : t("updateFailed")
+      );
+    } finally {
+      setUpdatingAll(false);
+      await refreshUpdates();
+    }
+  }
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+
+    if (!query) {
+      searchPackages("");
+      return;
+    }
+
+    // Se muestra "Buscando…" mientras el usuario escribe, en vez de "sin resultados".
+    setSearching(true);
+    const timer = window.setTimeout(() => searchPackages(query), 350);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setScreenshots([]);
+    setZoomedScreenshot("");
+
+    if (!selectedPackage) {
+      return;
+    }
+
+    let cancelled = false;
+
+    invoke<string[]>("get_screenshots", {
+      packageName: selectedPackage.name,
+      manager: selectedPackage.manager,
+    })
+      .then((urls) => {
+        if (!cancelled) {
+          setScreenshots(urls);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPackage]);
+
+  useEffect(() => {
+    refreshUpdates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -214,20 +345,21 @@ function App() {
    * COMPROBAR SI UN PAQUETE ESTÁ INSTALADO
    */
   async function checkPackageInstalled(
-    packageName: string
+    pkg: Package
   ): Promise<boolean> {
     try {
       const installed = await invoke<boolean>(
         "is_package_installed",
         {
-          packageName,
+          packageName: pkg.name,
+          manager: pkg.manager,
         }
       );
 
       return installed;
     } catch (error) {
       console.error(
-        `Error comprobando ${packageName}:`,
+        `Error comprobando ${pkg.name}:`,
         error
       );
 
@@ -258,7 +390,7 @@ function App() {
     > = {};
 
     packageList.forEach((pkg) => {
-      initialStatuses[pkg.name] = "checking";
+      initialStatuses[packageKey(pkg)] = "checking";
     });
 
     setInstallationStatuses(initialStatuses);
@@ -269,10 +401,10 @@ function App() {
     const results = await Promise.all(
       packageList.map(async (pkg) => {
         const installed =
-          await checkPackageInstalled(pkg.name);
+          await checkPackageInstalled(pkg);
 
         return {
-          name: pkg.name,
+          key: packageKey(pkg),
           installed,
         };
       })
@@ -287,7 +419,7 @@ function App() {
     > = {};
 
     results.forEach((result) => {
-      finalStatuses[result.name] =
+      finalStatuses[result.key] =
         result.installed
           ? "installed"
           : "available";
@@ -306,10 +438,14 @@ function App() {
       queryOverride ?? searchQuery
     ).trim();
 
+    // Solo la búsqueda más reciente puede actualizar la pantalla.
+    const requestId = ++searchRequestId.current;
+
     if (!query) {
       setPackages([]);
       setSearchError("");
       setInstallationStatuses({});
+      setSearching(false);
       return;
     }
 
@@ -323,11 +459,15 @@ function App() {
 
     try {
       const results = await invoke<Package[]>(
-        "search_pacman",
+        "search_all",
         {
           query,
         }
       );
+
+      if (requestId !== searchRequestId.current) {
+        return;
+      }
 
       const normalizedQuery =
         query.toLowerCase();
@@ -343,10 +483,10 @@ function App() {
       const sortedResults = [...results].sort(
         (a, b) => {
           const aName =
-            a.name.toLowerCase();
+            packageLabel(a).toLowerCase();
 
           const bName =
-            b.name.toLowerCase();
+            packageLabel(b).toLowerCase();
 
           const getScore = (name: string) => {
             if (name === normalizedQuery) {
@@ -411,6 +551,10 @@ function App() {
         uniqueResults
       );
     } catch (error) {
+      if (requestId !== searchRequestId.current) {
+        return;
+      }
+
       console.error(
         "Error buscando paquetes:",
         error
@@ -443,9 +587,7 @@ function App() {
     setPackageActionMessage("");
 
     const installed =
-      await checkPackageInstalled(
-        pkg.name
-      );
+      await checkPackageInstalled(pkg);
 
     setPackageInstalled(installed);
     setCheckingInstalled(false);
@@ -457,7 +599,7 @@ function App() {
     setInstallationStatuses(
       (previous) => ({
         ...previous,
-        [pkg.name]: installed
+        [packageKey(pkg)]: installed
           ? "installed"
           : "available",
       })
@@ -485,8 +627,8 @@ function App() {
       await invoke<string>(
           "install_package",
           {
-            packageName:
-              selectedPackage.name,
+            packageName: selectedPackage.name,
+            manager: selectedPackage.manager,
           }
         );
 
@@ -497,9 +639,7 @@ function App() {
        * de la instalación.
        */
       const installed =
-        await checkPackageInstalled(
-          selectedPackage.name
-        );
+        await checkPackageInstalled(selectedPackage);
 
       setPackageInstalled(installed);
 
@@ -509,7 +649,7 @@ function App() {
       setInstallationStatuses(
         (previous) => ({
           ...previous,
-          [selectedPackage.name]:
+          [packageKey(selectedPackage)]:
             installed
               ? "installed"
               : "available",
@@ -522,7 +662,7 @@ function App() {
       );
 
       setPackageActionError(
-        t("operationFailed")
+        typeof error === "string" ? error : t("operationFailed")
       );
     } finally {
       setInstalling(false);
@@ -550,8 +690,8 @@ function App() {
       await invoke<string>(
           "remove_package",
           {
-            packageName:
-              selectedPackage.name,
+            packageName: selectedPackage.name,
+            manager: selectedPackage.manager,
           }
         );
 
@@ -562,9 +702,7 @@ function App() {
        * de desinstalar.
        */
       const installed =
-        await checkPackageInstalled(
-          selectedPackage.name
-        );
+        await checkPackageInstalled(selectedPackage);
 
       setPackageInstalled(installed);
 
@@ -574,7 +712,7 @@ function App() {
       setInstallationStatuses(
         (previous) => ({
           ...previous,
-          [selectedPackage.name]:
+          [packageKey(selectedPackage)]:
             installed
               ? "installed"
               : "available",
@@ -587,7 +725,7 @@ function App() {
       );
 
       setPackageActionError(
-        t("operationFailed")
+        typeof error === "string" ? error : t("operationFailed")
       );
     } finally {
       setRemoving(false);
@@ -631,10 +769,10 @@ function App() {
    * OBTENER ESTADO DE UN PAQUETE
    */
   function getInstallationStatus(
-    packageName: string
+    pkg: Package
   ): InstallationStatus | undefined {
     return installationStatuses[
-      packageName
+      packageKey(pkg)
     ];
   }
 
@@ -694,13 +832,12 @@ function App() {
                 <div className="flex items-start gap-5">
 
                   <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-3xl font-semibold text-zinc-400">
-                    {selectedPackage.name
-                      .charAt(0)
+                    {packageLabel(selectedPackage).charAt(0)
                       .toUpperCase()}
                     {selectedPackage.icon && (
                       <img
                         src={selectedPackage.icon}
-                        alt={`Icono de ${selectedPackage.name}`}
+                        alt={`Icono de ${packageLabel(selectedPackage)}`}
                         className="absolute h-20 w-20 rounded-2xl bg-zinc-900 object-contain p-2"
                         onError={(event) => {
                           event.currentTarget.style.display = "none";
@@ -714,7 +851,7 @@ function App() {
                     <div className="flex flex-wrap items-center gap-3">
 
                       <h1 className="text-4xl font-bold tracking-tight text-white">
-                        {selectedPackage.name}
+                        {packageLabel(selectedPackage)}
                       </h1>
 
                       {checkingInstalled && (
@@ -731,6 +868,18 @@ function App() {
                         packageInstalled && (
                           <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
                             {t("installed")}
+                          </span>
+                        )}
+
+                      {!checkingInstalled &&
+                        packageInstalled &&
+                        updates?.some(
+                          (update) =>
+                            update.name === selectedPackage.name &&
+                            update.source === selectedPackage.manager
+                        ) && (
+                          <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
+                            {t("updateAvailable")}
                           </span>
                         )}
 
@@ -820,6 +969,56 @@ function App() {
 
               </section>
 
+              {/* CAPTURAS */}
+              {screenshots.length > 0 && (
+                <section className="mb-6 w-full">
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+                    <h2 className="text-xl font-semibold text-white">
+                      {t("screenshots")}
+                    </h2>
+
+                    <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
+                      {screenshots.map((url) => (
+                        <button
+                          key={url}
+                          type="button"
+                          onClick={() => setZoomedScreenshot(url)}
+                          className="shrink-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 transition hover:border-blue-500/50"
+                        >
+                          <img
+                            src={url}
+                            alt=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="h-52 w-auto object-cover"
+                            onError={(event) => {
+                              const holder = event.currentTarget.parentElement;
+                              if (holder) {
+                                holder.style.display = "none";
+                              }
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {zoomedScreenshot && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+                  onClick={() => setZoomedScreenshot("")}
+                >
+                  <img
+                    src={zoomedScreenshot}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="max-h-full max-w-full rounded-xl object-contain"
+                  />
+                </div>
+              )}
+
               {/* INSTALACIÓN */}
               <section className="w-full">
 
@@ -847,17 +1046,12 @@ function App() {
 
                   </p>
 
-                  <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-
-                    <code className="text-sm text-zinc-300">
-
-                      {packageInstalled
-                        ? `pacman -Q ${selectedPackage.name}`
-                        : `sudo pacman -S ${selectedPackage.name}`}
-
-                    </code>
-
-                  </div>
+                  {selectedPackage.manager === "aur" &&
+                    !packageInstalled && (
+                      <p className="mt-3 text-xs leading-5 text-amber-400/80">
+                        {t("aurWarning")}
+                      </p>
+                    )}
 
                   {checkingInstalled && (
                     <div className="mt-5 flex items-center gap-3 text-sm text-zinc-500">
@@ -1188,34 +1382,42 @@ function App() {
                         (pkg, index) => {
 
                           const isExact =
-                            pkg.name
-                              .toLowerCase() ===
+                            packageLabel(pkg).toLowerCase() ===
                             searchQuery
                               .trim()
                               .toLowerCase();
 
                           const status =
-                            getInstallationStatus(
-                              pkg.name
-                            );
+                            getInstallationStatus(pkg);
 
                           return (
                             <div
                               key={`${pkg.repository}-${pkg.name}-${pkg.version}-${index}`}
-                              className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 transition duration-200 hover:border-zinc-700 hover:bg-zinc-900"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openPackageDetails(pkg)}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.target === event.currentTarget &&
+                                  (event.key === "Enter" || event.key === " ")
+                                ) {
+                                  event.preventDefault();
+                                  openPackageDetails(pkg);
+                                }
+                              }}
+                              className="group cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 transition duration-200 hover:border-zinc-700 hover:bg-zinc-900 focus:outline-none focus-visible:border-blue-500/60"
                             >
 
                               <div className="flex items-start gap-4">
 
                                 {/* ICONO */}
                                 <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-lg font-semibold text-zinc-400">
-                                  {pkg.name
-                                    .charAt(0)
+                                  {packageLabel(pkg).charAt(0)
                                     .toUpperCase()}
                                   {pkg.icon && (
                                     <img
                                       src={pkg.icon}
-                                      alt={`${pkg.name} icon`}
+                                      alt={`${packageLabel(pkg)} icon`}
                                       className="absolute h-12 w-12 rounded-xl bg-zinc-950 object-contain p-1"
                                       onError={(event) => {
                                         event.currentTarget.style.display =
@@ -1230,8 +1432,8 @@ function App() {
 
                                   <div className="flex flex-wrap items-center gap-2">
 
-                                    <h3 className="font-semibold text-white">
-                                      {pkg.name}
+                                    <h3 className="font-semibold text-white transition group-hover:text-blue-400">
+                                      {packageLabel(pkg)}
                                     </h3>
 
                                     {isExact && (
@@ -1258,6 +1460,17 @@ function App() {
                                         {t("installed")}
                                       </span>
                                     )}
+
+                                    {status === "installed" &&
+                                      updates?.some(
+                                        (update) =>
+                                          update.name === pkg.name &&
+                                          update.source === pkg.manager
+                                      ) && (
+                                        <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+                                          {t("updateAvailable")}
+                                        </span>
+                                      )}
 
                                     {status ===
                                       "available" && (
@@ -1299,11 +1512,10 @@ function App() {
 
                                 {/* DETALLES */}
                                 <button
-                                  onClick={() =>
-                                    openPackageDetails(
-                                      pkg
-                                    )
-                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openPackageDetails(pkg);
+                                  }}
                                   className="hidden shrink-0 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white sm:block"
                                 >
                                   {t("details")}
@@ -1439,6 +1651,64 @@ function App() {
 
               </div>
 
+
+              {/* ACTUALIZACIONES */}
+              <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div>
+
+                    <h3 className="font-semibold text-white">
+                      {t("updatesTitle")}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {updatingAll
+                        ? t("updating")
+                        : updatesError
+                        ? updatesError
+                        : updates === null
+                        ? t("checkingUpdates")
+                        : updates.length === 0
+                        ? t("upToDate")
+                        : t("updatesCount", { count: updates.length })}
+                    </p>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={updateAllPrograms}
+                    disabled={
+                      updatingAll ||
+                      updates === null ||
+                      updates.length === 0
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updatingAll && (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    )}
+                    {updatingAll ? t("updating") : t("updateAll")}
+                  </button>
+
+                </div>
+
+                {updateError && (
+                  <div className="mt-4 rounded-xl border border-red-900/50 bg-red-950/20 p-4 text-xs leading-5 text-red-400/80">
+                    {updateError}
+                  </div>
+                )}
+
+                {updateMessage && !updateError && (
+                  <div className="mt-4 rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm font-medium text-emerald-300">
+                    {updateMessage}
+                  </div>
+                )}
+
+              </div>
+
             </section>
 
             {/* PACKAGE MANAGERS */}
@@ -1460,30 +1730,57 @@ function App() {
 
                 <div className="flex flex-wrap gap-2">
 
-                  {systemInfo?.package_managers.map(
-                    (manager) => (
+                  {systemInfo?.managers.map((manager) => (
+                    <div
+                      key={manager.name}
+                      className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
+                    >
+                      <span
+                        className={manager.installed
+                          ? "h-1.5 w-1.5 rounded-full bg-emerald-400"
+                          : "h-1.5 w-1.5 rounded-full bg-zinc-600"}
+                      />
 
-                      <div
-                        key={manager}
-                        className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
-                      >
+                      <span className="text-sm text-zinc-400">
+                        {manager.name}
+                      </span>
 
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
-                        <span className="text-sm text-zinc-400">
-                          {manager}
-                        </span>
-
+                      {manager.installed ? (
                         <span className="text-[10px] uppercase text-emerald-500">
                           {t("available")}
                         </span>
+                      ) : (
+                        <>
+                          <span className="text-[10px] uppercase text-zinc-600">
+                            {t("notInstalled")}
+                          </span>
 
-                      </div>
-
-                    )
-                  )}
+                          {manager.installable && (
+                            <button
+                              type="button"
+                              disabled={installingManager !== ""}
+                              onClick={() =>
+                                installManagerTool(manager.name)
+                              }
+                              className="rounded-md bg-blue-600 px-2 py-1 text-[11px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {installingManager === manager.name
+                                ? t("installingManager")
+                                : t("installManager")}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
 
                 </div>
+
+                {managerError && (
+                  <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                    {managerError}
+                  </p>
+                )}
 
               </div>
 

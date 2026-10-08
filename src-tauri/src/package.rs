@@ -8,4 +8,6 @@ pub struct Package {
     pub repository: String,
     pub manager: String,
     pub icon: Option<String>,
+    // Nombre para mostrar cuando el identificador no es legible (p. ej. Flatpak).
+    pub title: Option<String>,
 }

@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] select option {
+  background-color: #09090b;
+  color: #f4f4f5;
+}
+
+[data-theme="light"] select,
+[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #18181b !important;
+}
+
 [data-theme="light"] {
   background-color: #fafafa !important;
   color: #18181b !important;
@@ -60,4 +80,7 @@
 [data-theme="light"] [class*="text-red-300"],
 [data-theme="light"] [class*="text-red-400"] {
   color: #b91c1c !important;
+}
+[data-theme="light"] [class*="text-amber-400"] {
+  color: #b45309 !important;
 }
