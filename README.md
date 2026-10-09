@@ -88,7 +88,7 @@ Examples include:
 
 Repofy is currently in **early development** and is **not yet available as an installable package for end users**.
 
-The current version is **0.1.1**.
+The current version is **0.8.3**.
 
 The project is planned to be distributed through the **Arch User Repository (AUR)** once AUR distribution is available.
 

@@ -1,3 +1,5 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { useEffect, useState } from "react";
 import logoIcon from "../../logo.ico";
 import {
   isLanguage,
@@ -41,6 +43,14 @@ function Settings({
   setTheme,
   t,
 }: SettingsProps) {
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
+
   return (
     <div data-theme={theme} className="min-h-screen bg-[#09090b] text-zinc-100">
       <main className="min-h-screen overflow-auto">
@@ -354,8 +364,13 @@ function Settings({
 
                   <div>
 
-                    <h3 className="font-semibold text-white">
+                    <h3 className="flex items-center gap-2 font-semibold text-white">
                       RepoFy
+                      {appVersion && (
+                        <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
+                          {t("version")} {appVersion}
+                        </span>
+                      )}
                     </h3>
 
                     <p className="text-sm text-zinc-500">

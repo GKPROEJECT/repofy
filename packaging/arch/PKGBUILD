@@ -1,14 +1,23 @@
 pkgname=repofy
-pkgver=0.1.1
+pkgver=0.8.3
 pkgrel=1
 pkgdesc="Software center for Linux"
 arch=('x86_64')
 url="https://github.com/GKPROEJECT/repofy"
-license=('MIT')
+license=('GPL-3.0-only')
 
 depends=(
     'webkit2gtk-4.1'
     'gtk3'
+    'polkit'
+    'pacman'
+)
+
+optdepends=(
+    'pacman-contrib: detect pending updates without root (checkupdates)'
+    'libjxl: icons for programs that are not installed yet'
+    'paru: AUR support'
+    'flatpak: Flatpak support'
 )
 
 makedepends=(
