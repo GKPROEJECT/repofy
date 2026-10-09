@@ -51,6 +51,8 @@ Repofy provides a graphical interface for discovering and managing software whil
 
 <p align="center">
   <img src="captura.png" alt="Repofy screenshot" width="850">
+  <img src="steamcapture.png" alt="Repofy screenshot" width="850">
+  <img src="lighttheme.png" alt="Repofy screenshot" width="850">
 </p>
 
 ---
