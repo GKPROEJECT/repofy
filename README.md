@@ -47,15 +47,24 @@ Repofy provides a graphical interface for discovering and managing software whil
 
 ---
 
-## Screenshot
+## 📸 Screenshots
 
 <p align="center">
-  <img src="captura.png" alt="Repofy screenshot" width="850">
-  <img src="steamcapture.png" alt="Repofy screenshot" width="850">
-  <img src="lighttheme.png" alt="Repofy screenshot" width="850">
+  <img src="captura.png" alt="Repofy - Vista principal" width="48%">
+  &nbsp;
+  <img src="steamcapture.png" alt="Repofy - Integración con Steam" width="48%">
+</p>
+
+<p align="center">
+  <img src="lighttheme.png" alt="Repofy - Tema claro" width="48%">
+</p>
+
+<p align="center">
+  <i>Discover, explore and manage your software with Repofy.</i>
 </p>
 
 ---
+
 
 ## Supported distributions
 
