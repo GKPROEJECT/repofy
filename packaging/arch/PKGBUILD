@@ -1,5 +1,5 @@
 pkgname=repofy
-pkgver=0.8.3
+pkgver=1.0.2
 pkgrel=1
 pkgdesc="Software center for Linux"
 arch=('x86_64')

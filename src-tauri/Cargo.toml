@@ -1,6 +1,6 @@
 [package]
 name = "repofy"
-version = "0.8.3"
+version = "1.0.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

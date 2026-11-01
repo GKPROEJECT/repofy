@@ -1,4 +1,5 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import logoIcon from "../../logo.ico";
 import {
@@ -354,7 +355,7 @@ function Settings({
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-start gap-4">
 
                   <img
                     src={logoIcon}
@@ -377,15 +378,22 @@ function Settings({
                       {t("softwareCenter")}
                     </p>
 
+                    <p className="mt-2 text-sm text-zinc-500">
+                      {t("aboutDescription")}
+                    </p>
+
+                    <a
+                      href="https://repofy-web-rho.vercel.app/#about"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void openUrl("https://repofy-web-rho.vercel.app/#about");
+                      }}
+                      className="mt-3 inline-block text-sm font-medium text-blue-400 transition hover:text-blue-300"
+                    >
+                      {t("moreInformation")}
+                    </a>
+
                   </div>
-
-                </div>
-
-                <div className="mt-6 border-t border-zinc-800 pt-5">
-
-                  <p className="text-sm text-zinc-500">
-                    {t("aboutDescription")}
-                  </p>
 
                 </div>
 

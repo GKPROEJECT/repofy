@@ -123,6 +123,7 @@ function App() {
   const [updates, setUpdates] = useState<UpdateInfo[] | null>(null);
   const [updatesError, setUpdatesError] = useState("");
   const [updatingAll, setUpdatingAll] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [searching, setSearching] = useState(false);
@@ -231,6 +232,7 @@ function App() {
     try {
       await invoke<string>("update_system");
       setUpdateMessage(t("updateSuccess"));
+      setShowUpdateDialog(false);
     } catch (error) {
       console.error("Error actualizando el sistema:", error);
       setUpdateError(
@@ -1260,55 +1262,6 @@ function App() {
 
                 </form>
 
-                <div className="mt-3 flex items-center gap-2 px-2 text-xs text-zinc-600">
-
-                  <span>
-                    {t("examples")}
-                  </span>
-
-                  <button
-                    onClick={() => {
-                      setSearchQuery(
-                        "firefox"
-                      );
-                    }}
-                    className="transition hover:text-zinc-400"
-                  >
-                    Firefox
-                  </button>
-
-                  <span>
-                    ·
-                  </span>
-
-                  <button
-                    onClick={() => {
-                      setSearchQuery(
-                        "steam"
-                      );
-                    }}
-                    className="transition hover:text-zinc-400"
-                  >
-                    Steam
-                  </button>
-
-                  <span>
-                    ·
-                  </span>
-
-                  <button
-                    onClick={() => {
-                      setSearchQuery(
-                        "vlc"
-                      );
-                    }}
-                    className="transition hover:text-zinc-400"
-                  >
-                    VLC
-                  </button>
-
-                </div>
-
               </div>
 
             </section>
@@ -1679,7 +1632,10 @@ function App() {
 
                   <button
                     type="button"
-                    onClick={updateAllPrograms}
+                    onClick={() => {
+                      setUpdateError("");
+                      setShowUpdateDialog(true);
+                    }}
                     disabled={
                       updatingAll ||
                       updates === null ||
@@ -1690,7 +1646,7 @@ function App() {
                     {updatingAll && (
                       <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                     )}
-                    {updatingAll ? t("updating") : t("updateAll")}
+                    {updatingAll ? t("updating") : t("update")}
                   </button>
 
                 </div>
@@ -1708,6 +1664,103 @@ function App() {
                 )}
 
               </div>
+
+              {showUpdateDialog && (
+                <div
+                  className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget && !updatingAll) {
+                      setShowUpdateDialog(false);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && !updatingAll) {
+                      setShowUpdateDialog(false);
+                    }
+                  }}
+                  tabIndex={-1}
+                >
+                  <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="update-dialog-title"
+                    aria-describedby="update-dialog-description"
+                    className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
+                  >
+                    <header className="border-b border-zinc-800 px-5 py-4">
+                      <h2 id="update-dialog-title" className="text-lg font-semibold text-white">
+                        {t("updatesTitle")}
+                      </h2>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        {updates === null
+                          ? t("checkingUpdates")
+                          : t("updatesCount", { count: updates.length })}
+                      </p>
+                      <p id="update-dialog-description" className="mt-3 text-sm text-zinc-500">
+                        {t("updatePasswordDescription")}
+                      </p>
+                    </header>
+
+                    <ul className="min-h-0 flex-1 divide-y divide-zinc-800 overflow-y-auto px-5">
+                      {updates?.map((update) => (
+                        <li
+                          key={`${update.source}:${update.name}`}
+                          className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="break-all text-sm font-medium text-zinc-100">
+                              {update.name}
+                            </p>
+                            <p className="mt-1 text-xs uppercase text-zinc-500">
+                              {update.source}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 text-xs text-zinc-400">
+                            {update.current && <span className="break-all">{update.current}</span>}
+                            {update.current && update.latest && (
+                              <span aria-hidden="true">→</span>
+                            )}
+                            {update.latest && <span className="break-all text-zinc-200">{update.latest}</span>}
+                          </div>
+                        </li>
+                      ))}
+                      {updates?.length === 0 && (
+                        <li className="py-8 text-center text-sm text-zinc-500">
+                          {t("upToDate")}
+                        </li>
+                      )}
+                    </ul>
+
+                    {updateError && (
+                      <p role="alert" className="mx-5 mt-4 rounded-lg border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-300">
+                        {updateError}
+                      </p>
+                    )}
+
+                    <footer className="flex justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowUpdateDialog(false)}
+                        disabled={updatingAll}
+                        className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {t("cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={updateAllPrograms}
+                        disabled={updatingAll || updates === null || updates.length === 0}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {updatingAll && (
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                        )}
+                        {updatingAll ? t("updating") : t("update")}
+                      </button>
+                    </footer>
+                  </section>
+                </div>
+              )}
 
             </section>
 

@@ -86,9 +86,15 @@ Examples include:
 
 ### Current status
 
-Repofy is currently in **early development** and is **not yet available as an installable package for end users**.
+Repofy **1.0.2** is prepared for its first installable Arch package. The package can be attached to a GitHub Release for users of Arch Linux and Arch-based distributions.
 
-The current version is **0.8.3**.
+The current version is **1.0.2**.
+
+After the package is published, download `repofy-1.0.2-1-x86_64.pkg.tar.zst` from [GitHub Releases](https://github.com/GKPROEJECT/repofy/releases) and install it with:
+
+```bash
+sudo pacman -U repofy-1.0.2-1-x86_64.pkg.tar.zst
+```
 
 The project is planned to be distributed through the **Arch User Repository (AUR)** once AUR distribution is available.
 
